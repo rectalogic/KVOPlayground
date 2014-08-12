@@ -13,7 +13,7 @@ class KVOContext {
         return UnsafeMutablePointer<KVOContext>(Unmanaged<KVOContext>.passUnretained(self).toOpaque())
     }
 
-    class func fromPointer(pointer: UnsafeMutablePointer<KVOContext>) -> KVOContext {
+    private class func fromPointer(pointer: UnsafeMutablePointer<KVOContext>) -> KVOContext {
         return Unmanaged<KVOContext>.fromOpaque(COpaquePointer(pointer)).takeUnretainedValue()
     }
 
@@ -23,8 +23,9 @@ class KVOContext {
         self.observer = observer
     }
 
-    func invokeCallback(change: [NSObject : AnyObject]) {
-        observer(source: source, keyPath: keyPath, change: change)
+    class func invokeCallback(pointer: UnsafeMutablePointer<KVOContext>, change: [NSObject : AnyObject]) {
+        let context = fromPointer(pointer)
+        context.observer(source: context.source, keyPath: context.keyPath, change: change)
     }
 
     deinit {
@@ -34,7 +35,7 @@ class KVOContext {
 
 class KVODispatcher : NSObject {
     override func observeValueForKeyPath(keyPath: String!, ofObject object: AnyObject!, change: [NSObject : AnyObject]!, context: UnsafeMutablePointer<()>) {
-        KVOContext.fromPointer(UnsafeMutablePointer<KVOContext>(context)).invokeCallback(change)
+        KVOContext.invokeCallback(UnsafeMutablePointer<KVOContext>(context), change: change)
     }
 }
 
