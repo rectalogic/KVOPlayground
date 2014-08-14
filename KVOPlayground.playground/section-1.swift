@@ -2,59 +2,69 @@
 
 import UIKit
 
-typealias KVObserver = (source: NSObject, keyPath: String, change: [NSObject : AnyObject]) -> Void
+typealias KVObserver = (kvo: KeyValueObserver, change: [NSObject : AnyObject]) -> Void
 
-class KVOContext {
-    private let source: NSObject
-    private let keyPath: String
+class KeyValueObserver {
+    let source: NSObject
+    let keyPath: String
     private let observer: KVObserver
 
-    func __conversion() -> UnsafeMutablePointer<KVOContext> {
-        return UnsafeMutablePointer<KVOContext>(Unmanaged<KVOContext>.passUnretained(self).toOpaque())
-    }
-
-    private class func fromPointer(pointer: UnsafeMutablePointer<KVOContext>) -> KVOContext {
-        return Unmanaged<KVOContext>.fromOpaque(COpaquePointer(pointer)).takeUnretainedValue()
-    }
-
-    init(source: NSObject, keyPath: String, observer: KVObserver) {
+    init(source: NSObject, keyPath: String, options: NSKeyValueObservingOptions, observer: KVObserver) {
         self.source = source
         self.keyPath = keyPath
         self.observer = observer
+        source.addObserver(defaultKVODispatcher, forKeyPath: keyPath, options: options, context: self.pointer)
     }
 
-    class func invokeCallback(pointer: UnsafeMutablePointer<KVOContext>, change: [NSObject : AnyObject]) {
-        let context = fromPointer(pointer)
-        context.observer(source: context.source, keyPath: context.keyPath, change: change)
+    func __conversion() -> UnsafeMutablePointer<KeyValueObserver> {
+        return pointer
+    }
+
+    private lazy var pointer: UnsafeMutablePointer<KeyValueObserver> = {
+        return UnsafeMutablePointer<KeyValueObserver>(Unmanaged<KeyValueObserver>.passUnretained(self).toOpaque())
+    }()
+
+    private class func fromPointer(pointer: UnsafeMutablePointer<KeyValueObserver>) -> KeyValueObserver {
+        return Unmanaged<KeyValueObserver>.fromOpaque(COpaquePointer(pointer)).takeUnretainedValue()
+    }
+
+    class func observe(pointer: UnsafeMutablePointer<KeyValueObserver>, change: [NSObject : AnyObject]) {
+        let kvo = fromPointer(pointer)
+        kvo.observer(kvo: kvo, change: change)
     }
 
     deinit {
-        source.removeObserver(defaultKVODispatcher, forKeyPath: keyPath, context: self as UnsafeMutablePointer<KVOContext>)
+        source.removeObserver(defaultKVODispatcher, forKeyPath: keyPath, context: self.pointer)
     }
 }
 
+
 class KVODispatcher : NSObject {
     override func observeValueForKeyPath(keyPath: String!, ofObject object: AnyObject!, change: [NSObject : AnyObject]!, context: UnsafeMutablePointer<()>) {
-        KVOContext.invokeCallback(UnsafeMutablePointer<KVOContext>(context), change: change)
+        KeyValueObserver.observe(UnsafeMutablePointer<KeyValueObserver>(context), change: change)
     }
 }
 
 private let defaultKVODispatcher = KVODispatcher()
 
-extension NSObject {
-    func addKeyValueObserver(keyPath: String, options: NSKeyValueObservingOptions, observeChange: KVObserver) -> KVOContext? {
-        let context = KVOContext(source: self, keyPath: keyPath, observer: observeChange)
-        self.addObserver(defaultKVODispatcher, forKeyPath: keyPath, options: options, context: context as UnsafeMutablePointer<KVOContext>)
-        return context
-    }
-}
 
 
 let button = UIButton()
-var context = button.addKeyValueObserver("selected", options: .New) {
-    (source, keyPath, change) in
-    NSLog("OBSERVE %@ %@", keyPath, change)
+KeyValueObserver(source: button, keyPath: "selected", options: .New) {
+    (kvo, change) in
+    NSLog("OBSERVE 1 %@ %@", kvo.keyPath, change)
 }
+
 button.selected = true
 button.selected = false
-context = nil
+
+var kvo: KeyValueObserver? = KeyValueObserver(source: button, keyPath: "selected", options: .New) {
+    (kvo, change) in
+    NSLog("OBSERVE 2 %@ %@", kvo.keyPath, change)
+}
+
+button.selected = true
+button.selected = false
+kvo = nil
+button.selected = true
+
